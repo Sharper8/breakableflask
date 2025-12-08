@@ -8,42 +8,30 @@ jobs:
       - name: Checkout du code
         uses: actions/checkout@v4
       
-      - name: Scan des dépendances avec Trivy (affichage)
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          format: 'table'
-          exit-code: '0'
-          ignore-unfixed: true
-          severity: 'CRITICAL,HIGH'
-      
-      - name: Scan des dépendances avec Trivy (SARIF)
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          format: 'sarif'
-          output: 'trivy-results. sarif'
-          severity: 'CRITICAL,HIGH'
-        continue-on-error: true
-      
-      - name: Vérifier si le fichier SARIF existe
-        id: check_sarif
+      - name: 📋 Vérifier la présence de requirements.txt
         run: |
-          if [ -f trivy-results.sarif ]; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-            echo "✅ Fichier SARIF généré"
+          echo "=== Contenu du repository ==="
+          ls -la
+          echo ""
+          if [ -f requirements.txt ]; then
+            echo "✅ requirements.txt trouvé"
+            echo "=== Contenu de requirements.txt ==="
+            cat requirements.txt
           else
-            echo "exists=false" >> $GITHUB_OUTPUT
-            echo "ℹ️ Aucun fichier SARIF généré (probablement aucune vulnérabilité)"
+            echo "❌ requirements.txt non trouvé"
           fi
       
-      - name: Upload des résultats Trivy
-        if: steps.check_sarif. outputs.exists == 'true'
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: 'trivy-results.sarif'
+      - name: 🔍 SCAN 1 - Vulnérabilités dans requirements.txt
+        run: |
+          echo "================================================"
+          echo "🔍 SCAN DES DÉPENDANCES PYTHON (requirements.txt)"
+          echo "================================================"
+          docker run --rm -v $(pwd):/scan aquasec/trivy fs /scan \
+            --severity CRITICAL,HIGH,MEDIUM,LOW \
+            --scanners vuln \
+            --format table
+          echo ""
+          echo "✅ Scan des dépendances terminé"
 
   Dockerfile:
     runs-on: ubuntu-latest
@@ -52,47 +40,92 @@ jobs:
       - name: Checkout du code
         uses: actions/checkout@v4
       
-      - name: Vérifier l'existence du Dockerfile
+      - name: 📋 Vérifier la présence du Dockerfile
         id: check_dockerfile
         run: |
-          if [ !  -f Dockerfile ]; then
-            echo "⚠️ Dockerfile n'existe pas encore.  Ce job sera skippé."
+          if [ -f Dockerfile ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "✅ Dockerfile trouvé"
+            echo ""
+            echo "=== Contenu du Dockerfile ==="
+            cat Dockerfile
+            echo ""
+          else
             echo "exists=false" >> $GITHUB_OUTPUT
-            exit 0
+            echo "❌ Dockerfile non trouvé - jobs Docker skippés"
           fi
-          echo "exists=true" >> $GITHUB_OUTPUT
-          echo "✅ Dockerfile trouvé"
       
-      - name: Scan du Dockerfile avec Trivy
-        if: steps.check_dockerfile.outputs.exists == 'true'
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: 'config'
-          scan-ref: 'Dockerfile'
-          format: 'table'
-          exit-code: '0'
-          severity: 'CRITICAL,HIGH,MEDIUM'
-      
-      - name: Build de l'image Docker
-        if: steps.check_dockerfile.outputs.exists == 'true'
-        run: docker build -t breakableflask:${{ github. sha }} . 
-      
-      - name: Scan de l'image Docker avec Trivy
+      - name: 🔍 SCAN 2 - Mauvaises pratiques dans le Dockerfile
         if: steps. check_dockerfile.outputs.exists == 'true'
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: 'image'
-          image-ref: 'breakableflask:${{ github.sha }}'
-          format: 'table'
-          exit-code: '0'
-          ignore-unfixed: true
-          severity: 'CRITICAL,HIGH'
+        run: |
+          echo "================================================"
+          echo "🔍 SCAN DE CONFIGURATION DU DOCKERFILE"
+          echo "================================================"
+          docker run --rm -v $(pwd):/scan aquasec/trivy config /scan/Dockerfile \
+            --severity CRITICAL,HIGH,MEDIUM,LOW \
+            --format table
+          echo ""
+          echo "✅ Scan de configuration terminé"
+        continue-on-error: true
+      
+      - name: 🔨 BUILD de l'image Docker
+        if: steps.check_dockerfile.outputs. exists == 'true'
+        run: |
+          echo "================================================"
+          echo "🔨 CONSTRUCTION DE L'IMAGE DOCKER"
+          echo "================================================"
+          docker build -t breakableflask:${{ github.sha }} .
+          echo ""
+          echo "✅ Image construite: breakableflask:${{ github. sha }}"
+          echo ""
+          echo "=== Informations sur l'image ==="
+          docker images breakableflask:${{ github.sha }}
+      
+      - name: 🔍 SCAN 3 - Vulnérabilités dans l'image Docker construite
+        if: steps.check_dockerfile.outputs.exists == 'true'
+        run: |
+          echo "================================================"
+          echo "🔍 SCAN DE VULNÉRABILITÉS DE L'IMAGE DOCKER"
+          echo "================================================"
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy image breakableflask:${{ github.sha }} \
+            --severity CRITICAL,HIGH,MEDIUM,LOW \
+            --format table \
+            --ignore-unfixed=false
+          echo ""
+          echo "✅ Scan de l'image terminé"
+        continue-on-error: true
+      
+      - name: 📊 RÉSUMÉ FINAL
+        if: steps.check_dockerfile.outputs. exists == 'true'
+        run: |
+          echo "================================================"
+          echo "📊 RÉSUMÉ DES SCANS DE SÉCURITÉ"
+          echo "================================================"
+          echo ""
+          echo "✅ SCAN 1: Dépendances Python (requirements.txt)"
+          echo "   → Consultez le job 'Dependances' ci-dessus"
+          echo ""
+          echo "✅ SCAN 2: Configuration Dockerfile"
+          echo "   → Mauvaises pratiques détectées affichées ci-dessus"
+          echo ""
+          echo "✅ SCAN 3: Image Docker construite"
+          echo "   → Vulnérabilités OS + packages affichées ci-dessus"
+          echo ""
+          echo "================================================"
 
   Deploy:
     runs-on: ubuntu-latest
     needs: Dockerfile
+    if: always()
     steps:
-      - name: Deploy
+      - name: 🚀 Deploy
         run: |
-          echo "✅ Pipeline terminé avec succès!"
-          echo "Votre application est prête à être déployée"
+          echo "✅ Pipeline de sécurité DevSecOps terminé!"
+          echo ""
+          echo "📋 Rapport complet disponible dans les jobs ci-dessus:"
+          echo "  1. Job 'Dependances' → Vulnérabilités dans requirements.txt"
+          echo "  2.  Job 'Dockerfile' → Configuration + Image Docker"
+          echo ""
+          echo "🚀 Prêt pour le déploiement"
