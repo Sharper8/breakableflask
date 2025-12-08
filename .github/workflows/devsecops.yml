@@ -7,7 +7,7 @@ jobs:
       - name: Dependances  
         run: |  
           echo "ecrire ici le scrypt de contrôle des dépendances"  
-  Dockerfile:  
+  Dockerfile:
     runs-on: ubuntu-latest  
     needs: Dependances  
     steps:  
