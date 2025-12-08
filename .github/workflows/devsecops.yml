@@ -1,5 +1,3 @@
-devsecops.yml
-
 name: Automatisation des tests DevSecOps  
 on: push  
 jobs:  
