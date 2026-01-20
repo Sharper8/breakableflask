@@ -68,7 +68,7 @@ Structured security reports in JSON format are automatically generated and avail
 * `rapport-dependances` - Dependencies vulnerability scan results
 * `rapport-dockerfile-config` - Dockerfile configuration analysis
 * `rapport-docker-image` - Docker image vulnerability scan
-* `rapports-securite-complets` - Complete bundle with all reports and metadata
+* `rapports-securite-complets` - Complete bundle with all reports and a summary containing metadata (repository name, commit SHA, branch, and timestamp)
 
 To download these reports:
 1. Go to the **Actions** tab in the GitHub repository

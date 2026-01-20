@@ -121,7 +121,11 @@ jobs:
           docker run --rm -v $(pwd):/scan aquasec/trivy config /scan/Dockerfile \
             --severity CRITICAL,HIGH,MEDIUM,LOW \
             --format json \
-            --output /scan/reports/dockerfile-config-scan.json || echo "{}" > reports/dockerfile-config-scan.json
+            --output /scan/reports/dockerfile-config-scan.json || true
+          # Create empty JSON if scan failed
+          if [ ! -f reports/dockerfile-config-scan.json ]; then
+            echo "{}" > reports/dockerfile-config-scan.json
+          fi
           echo "✅ Rapport JSON généré: reports/dockerfile-config-scan.json"
         continue-on-error: true
       
@@ -173,7 +177,11 @@ jobs:
             --severity CRITICAL,HIGH,MEDIUM,LOW \
             --format json \
             --output /scan/reports/docker-image-scan.json \
-            --ignore-unfixed=false || echo "{}" > reports/docker-image-scan.json
+            --ignore-unfixed=false || true
+          # Create empty JSON if scan failed
+          if [ ! -f reports/docker-image-scan.json ]; then
+            echo "{}" > reports/docker-image-scan.json
+          fi
           echo "✅ Rapport JSON généré: reports/docker-image-scan.json"
         continue-on-error: true
       
