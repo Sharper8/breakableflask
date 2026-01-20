@@ -32,6 +32,23 @@ jobs:
             --format table
           echo ""
           echo "✅ Scan des dépendances terminé"
+      
+      - name: 📄 Générer le rapport JSON des dépendances
+        run: |
+          mkdir -p reports
+          docker run --rm -v $(pwd):/scan aquasec/trivy fs /scan \
+            --severity CRITICAL,HIGH,MEDIUM,LOW \
+            --scanners vuln \
+            --format json \
+            --output /scan/reports/dependances-scan.json
+          echo "✅ Rapport JSON généré: reports/dependances-scan.json"
+      
+      - name: 📤 Upload du rapport des dépendances
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapport-dependances
+          path: reports/dependances-scan.json
+          retention-days: 30
 
   Dockerfile:
     runs-on: ubuntu-latest
@@ -56,7 +73,7 @@ jobs:
           fi
       
       - name: 🔍 SCAN 2 - Mauvaises pratiques dans le Dockerfile
-        if: steps. check_dockerfile.outputs.exists == 'true'
+        if: steps.check_dockerfile.outputs.exists == 'true'
         run: |
           echo "================================================"
           echo "🔍 SCAN DE CONFIGURATION DU DOCKERFILE"
@@ -68,15 +85,34 @@ jobs:
           echo "✅ Scan de configuration terminé"
         continue-on-error: true
       
+      - name: 📄 Générer le rapport JSON du Dockerfile
+        if: steps.check_dockerfile.outputs.exists == 'true'
+        run: |
+          mkdir -p reports
+          docker run --rm -v $(pwd):/scan aquasec/trivy config /scan/Dockerfile \
+            --severity CRITICAL,HIGH,MEDIUM,LOW \
+            --format json \
+            --output /scan/reports/dockerfile-config-scan.json || echo "{}" > reports/dockerfile-config-scan.json
+          echo "✅ Rapport JSON généré: reports/dockerfile-config-scan.json"
+        continue-on-error: true
+      
+      - name: 📤 Upload du rapport Dockerfile
+        if: steps.check_dockerfile.outputs.exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapport-dockerfile-config
+          path: reports/dockerfile-config-scan.json
+          retention-days: 30
+      
       - name: 🔨 BUILD de l'image Docker
-        if: steps.check_dockerfile.outputs. exists == 'true'
+        if: steps.check_dockerfile.outputs.exists == 'true'
         run: |
           echo "================================================"
           echo "🔨 CONSTRUCTION DE L'IMAGE DOCKER"
           echo "================================================"
           docker build -t breakableflask:${{ github.sha }} .
           echo ""
-          echo "✅ Image construite: breakableflask:${{ github. sha }}"
+          echo "✅ Image construite: breakableflask:${{ github.sha }}"
           echo ""
           echo "=== Informations sur l'image ==="
           docker images breakableflask:${{ github.sha }}
@@ -97,8 +133,31 @@ jobs:
           echo "✅ Scan de l'image terminé"
         continue-on-error: true
       
+      - name: 📄 Générer le rapport JSON de l'image Docker
+        if: steps.check_dockerfile.outputs.exists == 'true'
+        run: |
+          mkdir -p reports
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v $(pwd):/scan \
+            aquasec/trivy image breakableflask:${{ github.sha }} \
+            --severity CRITICAL,HIGH,MEDIUM,LOW \
+            --format json \
+            --output /scan/reports/docker-image-scan.json \
+            --ignore-unfixed=false || echo "{}" > reports/docker-image-scan.json
+          echo "✅ Rapport JSON généré: reports/docker-image-scan.json"
+        continue-on-error: true
+      
+      - name: 📤 Upload du rapport de l'image Docker
+        if: steps.check_dockerfile.outputs.exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapport-docker-image
+          path: reports/docker-image-scan.json
+          retention-days: 30
+      
       - name: 📊 RÉSUMÉ FINAL
-        if: steps.check_dockerfile.outputs. exists == 'true'
+        if: steps.check_dockerfile.outputs.exists == 'true'
         run: |
           echo "================================================"
           echo "📊 RÉSUMÉ DES SCANS DE SÉCURITÉ"
@@ -114,6 +173,40 @@ jobs:
           echo "   → Vulnérabilités OS + packages affichées ci-dessus"
           echo ""
           echo "================================================"
+          echo "📥 Rapports téléchargeables disponibles:"
+          echo "   → rapport-dependances"
+          echo "   → rapport-dockerfile-config"
+          echo "   → rapport-docker-image"
+          echo "   → rapports-securite-complets"
+          echo "================================================"
+      
+      - name: 📦 Créer un résumé des rapports
+        if: steps.check_dockerfile.outputs.exists == 'true'
+        run: |
+          mkdir -p reports
+          echo "{" > reports/resume-scan.json
+          echo '  "metadata": {' >> reports/resume-scan.json
+          echo '    "date": "'$(date -u +"%Y-%m-%dT%H:%M:%SZ")'",' >> reports/resume-scan.json
+          echo '    "repository": "${{ github.repository }}",' >> reports/resume-scan.json
+          echo '    "commit": "${{ github.sha }}",' >> reports/resume-scan.json
+          echo '    "branch": "${{ github.ref_name }}"' >> reports/resume-scan.json
+          echo '  },' >> reports/resume-scan.json
+          echo '  "scans": {' >> reports/resume-scan.json
+          echo '    "dependances": "dependances-scan.json",' >> reports/resume-scan.json
+          echo '    "dockerfile_config": "dockerfile-config-scan.json",' >> reports/resume-scan.json
+          echo '    "docker_image": "docker-image-scan.json"' >> reports/resume-scan.json
+          echo '  }' >> reports/resume-scan.json
+          echo "}" >> reports/resume-scan.json
+          echo "✅ Résumé créé: reports/resume-scan.json"
+        continue-on-error: true
+      
+      - name: 📤 Upload de tous les rapports
+        if: steps.check_dockerfile.outputs.exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapports-securite-complets
+          path: reports/
+          retention-days: 30
 
   Deploy:
     runs-on: ubuntu-latest
@@ -126,6 +219,17 @@ jobs:
           echo ""
           echo "📋 Rapport complet disponible dans les jobs ci-dessus:"
           echo "  1. Job 'Dependances' → Vulnérabilités dans requirements.txt"
-          echo "  2.  Job 'Dockerfile' → Configuration + Image Docker"
+          echo "  2. Job 'Dockerfile' → Configuration + Image Docker"
+          echo ""
+          echo "📥 Rapports structurés téléchargeables (format JSON):"
+          echo "  • rapport-dependances → Analyse des dépendances Python"
+          echo "  • rapport-dockerfile-config → Configuration du Dockerfile"
+          echo "  • rapport-docker-image → Vulnérabilités de l'image Docker"
+          echo "  • rapports-securite-complets → Tous les rapports + résumé"
+          echo ""
+          echo "💡 Pour télécharger les rapports:"
+          echo "   1. Allez dans l'onglet 'Actions' du repository"
+          echo "   2. Sélectionnez ce workflow run"
+          echo "   3. Téléchargez les artifacts dans la section 'Artifacts'"
           echo ""
           echo "🚀 Prêt pour le déploiement"
