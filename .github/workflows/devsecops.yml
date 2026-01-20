@@ -49,6 +49,35 @@ jobs:
           name: rapport-dependances
           path: reports/dependances-scan.json
           retention-days: 30
+      
+      - name: 📦 Créer un résumé initial des rapports
+        run: |
+          mkdir -p reports
+          jq -n \
+            --arg date "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+            --arg repo "${{ github.repository }}" \
+            --arg commit "${{ github.sha }}" \
+            --arg branch "${{ github.ref_name }}" \
+            '{
+              metadata: {
+                date: $date,
+                repository: $repo,
+                commit: $commit,
+                branch: $branch
+              },
+              scans: {
+                dependances: "dependances-scan.json"
+              }
+            }' > reports/resume-scan-dependances.json
+          echo "✅ Résumé initial créé: reports/resume-scan-dependances.json"
+        continue-on-error: true
+      
+      - name: 📤 Upload du résumé des dépendances
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapport-resume-dependances
+          path: reports/resume-scan-dependances.json
+          retention-days: 30
 
   Dockerfile:
     runs-on: ubuntu-latest
@@ -184,19 +213,24 @@ jobs:
         if: steps.check_dockerfile.outputs.exists == 'true'
         run: |
           mkdir -p reports
-          echo "{" > reports/resume-scan.json
-          echo '  "metadata": {' >> reports/resume-scan.json
-          echo '    "date": "'$(date -u +"%Y-%m-%dT%H:%M:%SZ")'",' >> reports/resume-scan.json
-          echo '    "repository": "${{ github.repository }}",' >> reports/resume-scan.json
-          echo '    "commit": "${{ github.sha }}",' >> reports/resume-scan.json
-          echo '    "branch": "${{ github.ref_name }}"' >> reports/resume-scan.json
-          echo '  },' >> reports/resume-scan.json
-          echo '  "scans": {' >> reports/resume-scan.json
-          echo '    "dependances": "dependances-scan.json",' >> reports/resume-scan.json
-          echo '    "dockerfile_config": "dockerfile-config-scan.json",' >> reports/resume-scan.json
-          echo '    "docker_image": "docker-image-scan.json"' >> reports/resume-scan.json
-          echo '  }' >> reports/resume-scan.json
-          echo "}" >> reports/resume-scan.json
+          jq -n \
+            --arg date "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+            --arg repo "${{ github.repository }}" \
+            --arg commit "${{ github.sha }}" \
+            --arg branch "${{ github.ref_name }}" \
+            '{
+              metadata: {
+                date: $date,
+                repository: $repo,
+                commit: $commit,
+                branch: $branch
+              },
+              scans: {
+                dependances: "dependances-scan.json",
+                dockerfile_config: "dockerfile-config-scan.json",
+                docker_image: "docker-image-scan.json"
+              }
+            }' > reports/resume-scan.json
           echo "✅ Résumé créé: reports/resume-scan.json"
         continue-on-error: true
       
