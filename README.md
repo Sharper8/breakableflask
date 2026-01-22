@@ -51,3 +51,29 @@ On launch breakableflask will attempt to populate the database server with the n
 If you are using an Oracle database, you need to provide the location of the Oracle client libraries (as installed with the Oracle instant Client or full database) using the `oracle_lib_dir` option.
 
 Given that one of the reasons for this programs existence is to provide a test bed that is as easy as possible to run, there are included instructions in `docker_database_setup.md` file that will help you easily start up an instance of the various supported database types in Docker. 
+
+
+## Security Scanning Reports
+
+This repository includes automated security scanning via GitHub Actions. Each push triggers DevSecOps scans that analyze:
+
+* **Python dependencies** (requirements.txt) - Vulnerability scanning
+* **Dockerfile configuration** - Best practices and security checks
+* **Docker image** - OS and package vulnerabilities
+
+### Downloadable Reports
+
+Structured security reports in JSON format are automatically generated and available as downloadable artifacts:
+
+* `rapport-dependances` - Dependencies vulnerability scan results
+* `rapport-dockerfile-config` - Dockerfile configuration analysis
+* `rapport-docker-image` - Docker image vulnerability scan
+* `rapports-securite-complets` - Complete bundle with all reports and a summary containing metadata (repository name, commit SHA, branch, and timestamp)
+
+To download these reports:
+1. Go to the **Actions** tab in the GitHub repository
+2. Select the workflow run you want to inspect
+3. Scroll to the **Artifacts** section at the bottom
+4. Download the desired report(s)
+
+Reports are retained for 30 days.
